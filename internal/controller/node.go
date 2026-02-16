@@ -68,7 +68,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// Upsert checks: load, memory, disk
-	for _, checkType := range []string{"load", "memory", "disk"} {
+	for _, checkType := range []string{"load", "memory"} {
 		check := tinymon.Check{
 			HostAddress:     addr,
 			Type:            checkType,
@@ -134,9 +134,6 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		})
 	}
 
-	// Disk check via Kubelet Stats API
-	diskResult := r.fetchDiskUsage(ctx, node.Name, addr)
-	results = append(results, diskResult)
 
 	if len(results) > 0 {
 		if err := r.TinyMon.PushBulk(results); err != nil {
