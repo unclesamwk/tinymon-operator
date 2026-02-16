@@ -49,7 +49,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	addr := resourceAddress(r.Cluster, "backup", schedule.Namespace, schedule.Name)
 	interval := checkInterval(schedule.Annotations, 60)
-	t := defaultTopic(r.Cluster, schedule.Namespace, "backups", schedule.Annotations)
+	t := defaultTopic(r.Cluster, "backups", schedule.Namespace, schedule.Annotations)
 
 	host := tinymon.Host{
 		Name:        displayName(schedule.Annotations, schedule.Name),

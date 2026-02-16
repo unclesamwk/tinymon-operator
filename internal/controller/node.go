@@ -55,7 +55,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		Name:        displayName(node.Annotations, node.Name),
 		Address:     addr,
 		Description: fmt.Sprintf("Kubernetes Node %s", node.Name),
-		Topic:       defaultTopic(r.Cluster, "", "nodes", node.Annotations),
+		Topic:       defaultTopic(r.Cluster, "nodes", "", node.Annotations),
 		Enabled:     1,
 	}
 

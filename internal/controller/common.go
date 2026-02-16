@@ -16,14 +16,14 @@ func resourceAddress(cluster, kind, namespace, name string) string {
 	return "k8s://" + cluster + "/" + kind + "/" + namespace + "/" + name
 }
 
-func defaultTopic(cluster, namespace, kind string, annotations map[string]string) string {
+func defaultTopic(cluster, kind, namespace string, annotations map[string]string) string {
 	if annotations != nil && annotations[AnnotationTopic] != "" {
 		return annotations[AnnotationTopic]
 	}
 	if namespace == "" {
 		return "Kubernetes/" + cluster + "/" + kind
 	}
-	return "Kubernetes/" + cluster + "/" + namespace
+	return "Kubernetes/" + cluster + "/" + kind + "/" + namespace
 }
 
 func isEnabled(annotations map[string]string) bool {

@@ -50,7 +50,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	addr := resourceAddress(r.Cluster, "ingress", ingress.Namespace, ingress.Name)
 	httpInterval := checkInterval(ingress.Annotations, 300)
 	certInterval := checkInterval(ingress.Annotations, 3600)
-	t := defaultTopic(r.Cluster, ingress.Namespace, "ingresses", ingress.Annotations)
+	t := defaultTopic(r.Cluster, "ingresses", ingress.Namespace, ingress.Annotations)
 
 	hosts := ingressHosts(&ingress)
 	host := tinymon.Host{

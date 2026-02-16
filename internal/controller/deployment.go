@@ -48,7 +48,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	addr := resourceAddress(r.Cluster, "deployment", deploy.Namespace, deploy.Name)
 	interval := checkInterval(deploy.Annotations, 60)
-	t := defaultTopic(r.Cluster, deploy.Namespace, "deployments", deploy.Annotations)
+	t := defaultTopic(r.Cluster, "deployments", deploy.Namespace, deploy.Annotations)
 
 	host := tinymon.Host{
 		Name:        displayName(deploy.Annotations, deploy.Name),

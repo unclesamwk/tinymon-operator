@@ -48,7 +48,7 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	addr := resourceAddress(r.Cluster, "pvc", pvc.Namespace, pvc.Name)
 	interval := checkInterval(pvc.Annotations, 60)
-	t := defaultTopic(r.Cluster, pvc.Namespace, "storage", pvc.Annotations)
+	t := defaultTopic(r.Cluster, "storage", pvc.Namespace, pvc.Annotations)
 
 	sizeStr := ""
 	var sizeGB float64
