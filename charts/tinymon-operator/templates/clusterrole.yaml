@@ -25,7 +25,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["k8up.io"]
     resources: ["backups"]
     verbs: ["get", "list", "watch"]
