@@ -24,6 +24,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             privileged: true
+          terminationMessagePath: /tmp/termination-log
           env:
             - name: TINYMON_URL
               valueFrom:
