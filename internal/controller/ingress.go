@@ -70,8 +70,16 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Create pull checks (TinyMon executes these, no result push from operator)
+	httpPath := ""
+	if p, ok := ingress.Annotations[AnnotationHTTPPath]; ok && p != "" {
+		httpPath = strings.TrimRight(p, "/")
+		if !strings.HasPrefix(httpPath, "/") {
+			httpPath = "/" + httpPath
+		}
+	}
+
 	for _, h := range hosts {
-		url := "https://" + h
+		url := "https://" + h + httpPath
 		cfg := map[string]interface{}{"url": url}
 		if expectedStatus > 0 {
 			cfg["expected_status"] = expectedStatus
