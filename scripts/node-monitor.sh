@@ -7,7 +7,7 @@ set -eu
 : "${NODE_NAME:?NODE_NAME is required}"
 : "${INTERVAL:=60}"
 
-HOST_ADDRESS="k8s://${CLUSTER_NAME}/nodes/${NODE_NAME}"
+HOST_ADDRESS="k8s://${CLUSTER_NAME}/node/${NODE_NAME}"
 
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
 
