@@ -8,6 +8,7 @@ const (
 	AnnotationTopic         = "tinymon.io/topic"
 	AnnotationCheckInterval = "tinymon.io/check-interval"
 	AnnotationExpectedStatus = "tinymon.io/expected-status"
+	AnnotationIcecastMounts  = "tinymon.io/icecast-mounts"
 )
 
 func resourceAddress(cluster, kind, namespace, name string) string {

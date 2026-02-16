@@ -10,7 +10,7 @@ Annotate your Kubernetes resources with `tinymon.io/enabled: "true"` and the ope
 |----------|------------|------|-----------------|
 | **Node** | load, memory, disk | Push | CPU/Memory via Metrics API: ok <80%, warning 80-90%, critical >90%. Disk via DiskPressure condition. |
 | **Deployment** | status | Push | All replicas ready = ok, partial = warning, none = critical |
-| **Ingress** | http, certificate | Pull | Created in TinyMon, executed by TinyMon (not pushed by operator) |
+| **Ingress** | http, certificate, icecast_listeners | Pull | Created in TinyMon, executed by TinyMon (not pushed by operator) |
 | **PVC** | disk | Push | Bound = ok, Pending = warning, Lost = critical. Value: requested size in GB. |
 | **K8up Schedule** | status | Push | Lists Backup objects: Completed = ok, Failed = critical, >48h stale = warning |
 
@@ -26,6 +26,7 @@ Annotate your Kubernetes resources with `tinymon.io/enabled: "true"` and the ope
 | `tinymon.io/topic` | Topic/group in TinyMon | `Kubernetes/<cluster>/<kind>/<namespace>` |
 | `tinymon.io/check-interval` | Check interval in seconds (minimum 30) | 60 (Ingress HTTP: 300, Certificate: 3600) |
 | `tinymon.io/expected-status` | Expected HTTP status code for Ingress checks | 200 |
+| `tinymon.io/icecast-mounts` | Comma-separated Icecast mountpoints (creates icecast_listeners checks) | - |
 
 ## Installation
 
@@ -79,6 +80,22 @@ spec:
 ```
 
 This creates HTTP and certificate checks in TinyMon for each host in the Ingress. TinyMon executes these checks itself (pull mode). The expected HTTP status code is set to 301.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: icecast
+  annotations:
+    tinymon.io/enabled: "true"
+    tinymon.io/icecast-mounts: "/stream,/live"
+spec:
+  rules:
+    - host: radio.example.com
+      # ...
+```
+
+This additionally creates `icecast_listeners` checks for each mountpoint (`/stream` and `/live`). TinyMon monitors listener counts via the Icecast status page.
 
 ## Configuration
 

@@ -105,6 +105,28 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	// Create icecast_listeners checks if annotation is set (pull mode)
+	if mounts, ok := ingress.Annotations[AnnotationIcecastMounts]; ok && mounts != "" {
+		for _, mount := range strings.Split(mounts, ",") {
+			mount = strings.TrimSpace(mount)
+			if mount == "" {
+				continue
+			}
+			for _, h := range hosts {
+				iceCheck := tinymon.Check{
+					HostAddress:     addr,
+					Type:            "icecast_listeners",
+					Config:          map[string]interface{}{"host": h, "port": 443, "mount": mount},
+					IntervalSeconds: httpInterval,
+					Enabled:         1,
+				}
+				if err := r.TinyMon.UpsertCheck(iceCheck); err != nil {
+					log.Error(err, "failed to upsert icecast check", "host", h, "mount", mount)
+				}
+			}
+		}
+	}
+
 	return ctrl.Result{RequeueAfter: time.Duration(httpInterval) * time.Second}, nil
 }
 
