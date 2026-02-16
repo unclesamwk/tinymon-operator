@@ -54,7 +54,8 @@ func main() {
 
 	clusterName := os.Getenv("CLUSTER_NAME")
 	if clusterName == "" {
-		clusterName = "default"
+		log.Error(nil, "CLUSTER_NAME environment variable is required")
+		os.Exit(1)
 	}
 
 	client := tinymon.NewClient(tinymonURL, apiKey)
