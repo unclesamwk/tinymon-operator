@@ -1,9 +1,12 @@
 package controller
 
+import "strconv"
+
 const (
-	AnnotationEnabled = "tinymon.io/enabled"
-	AnnotationName    = "tinymon.io/name"
-	AnnotationTopic   = "tinymon.io/topic"
+	AnnotationEnabled       = "tinymon.io/enabled"
+	AnnotationName          = "tinymon.io/name"
+	AnnotationTopic         = "tinymon.io/topic"
+	AnnotationCheckInterval = "tinymon.io/check-interval"
 )
 
 func resourceAddress(kind, namespace, name string) string {
@@ -32,4 +35,16 @@ func topic(annotations map[string]string) string {
 		return ""
 	}
 	return annotations[AnnotationTopic]
+}
+
+func checkInterval(annotations map[string]string, defaultInterval int) int {
+	if annotations == nil {
+		return defaultInterval
+	}
+	if v, ok := annotations[AnnotationCheckInterval]; ok {
+		if i, err := strconv.Atoi(v); err == nil && i >= 30 {
+			return i
+		}
+	}
+	return defaultInterval
 }

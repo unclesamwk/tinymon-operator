@@ -32,9 +32,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if errors.IsNotFound(err) {
 			log.Info("deployment deleted, removing from TinyMon")
 			addr := resourceAddress("deployment", req.Namespace, req.Name)
-			if err := r.TinyMon.DeleteHost(addr); err != nil {
-				log.Error(err, "failed to delete host from TinyMon")
-			}
+			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -47,6 +45,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	addr := resourceAddress("deployment", deploy.Namespace, deploy.Name)
+	interval := checkInterval(deploy.Annotations, 60)
 	defaultTopic := deploy.Namespace + "/deployments"
 	t := topic(deploy.Annotations)
 	if t == "" {
@@ -70,7 +69,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	check := tinymon.Check{
 		HostAddress:     addr,
 		Type:            "ping",
-		IntervalSeconds: 60,
+		IntervalSeconds: interval,
 		Enabled:         1,
 	}
 	if err := r.TinyMon.UpsertCheck(check); err != nil {
@@ -79,14 +78,14 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	status, msg := deploymentStatus(&deploy)
-	result := tinymon.Result{
+	results := []tinymon.Result{{
 		HostAddress: addr,
 		CheckType:   "ping",
 		Status:      status,
 		Message:     msg,
-	}
-	if err := r.TinyMon.PushResult(result); err != nil {
-		log.Error(err, "failed to push result")
+	}}
+	if err := r.TinyMon.PushBulk(results); err != nil {
+		log.Error(err, "failed to push bulk results")
 		return ctrl.Result{}, err
 	}
 

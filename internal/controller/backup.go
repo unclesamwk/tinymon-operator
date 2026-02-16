@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/unclesamwk/tinymon-operator/internal/tinymon"
@@ -33,9 +34,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if errors.IsNotFound(err) {
 			log.Info("K8up Schedule deleted, removing from TinyMon")
 			addr := resourceAddress("backup", req.Namespace, req.Name)
-			if err := r.TinyMon.DeleteHost(addr); err != nil {
-				log.Error(err, "failed to delete host from TinyMon")
-			}
+			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -48,6 +47,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	addr := resourceAddress("backup", schedule.Namespace, schedule.Name)
+	interval := checkInterval(schedule.Annotations, 60)
 	defaultTopic := schedule.Namespace + "/backups"
 	t := topic(schedule.Annotations)
 	if t == "" {
@@ -71,7 +71,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	check := tinymon.Check{
 		HostAddress:     addr,
 		Type:            "ping",
-		IntervalSeconds: 3600,
+		IntervalSeconds: interval,
 		Enabled:         1,
 	}
 	if err := r.TinyMon.UpsertCheck(check); err != nil {
@@ -79,34 +79,84 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	status, msg := backupStatus(&schedule)
-	result := tinymon.Result{
+	// List Backup objects in the same namespace
+	var backupList k8upv1.BackupList
+	if err := r.List(ctx, &backupList, client.InNamespace(schedule.Namespace)); err != nil {
+		log.Error(err, "failed to list backups")
+		results := []tinymon.Result{{
+			HostAddress: addr,
+			CheckType:   "ping",
+			Status:      "unknown",
+			Message:     "Failed to list backup objects",
+		}}
+		_ = r.TinyMon.PushBulk(results)
+		return ctrl.Result{}, err
+	}
+
+	status, msg, ageSec := lastBackupStatus(backupList.Items)
+	results := []tinymon.Result{{
 		HostAddress: addr,
 		CheckType:   "ping",
 		Status:      status,
+		Value:       ageSec,
 		Message:     msg,
-	}
-	if err := r.TinyMon.PushResult(result); err != nil {
-		log.Error(err, "failed to push result")
+	}}
+	if err := r.TinyMon.PushBulk(results); err != nil {
+		log.Error(err, "failed to push bulk results")
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func backupStatus(schedule *k8upv1.Schedule) (string, string) {
-	for _, cond := range schedule.Status.Conditions {
-		if cond.Type == "Ready" {
-			if cond.Status == "True" {
-				return "ok", fmt.Sprintf("Schedule is ready (last transition: %s)", cond.LastTransitionTime.Format(time.RFC3339))
+func lastBackupStatus(backups []k8upv1.Backup) (string, string, float64) {
+	if len(backups) == 0 {
+		return "warning", "No backups found", 0
+	}
+
+	// Sort by creation time, newest first
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].CreationTimestamp.After(backups[j].CreationTimestamp.Time)
+	})
+
+	latest := backups[0]
+	age := time.Since(latest.CreationTimestamp.Time)
+	ageSec := age.Seconds()
+	ageStr := formatDuration(age)
+
+	// Check conditions for completion/failure
+	for _, cond := range latest.Status.Conditions {
+		if cond.Type == "Completed" && cond.Status == "True" {
+			if age > 48*time.Hour {
+				return "warning", fmt.Sprintf("Last backup completed %s ago (stale)", ageStr), ageSec
 			}
-			return "warning", fmt.Sprintf("Schedule not ready: %s", cond.Message)
+			return "ok", fmt.Sprintf("Last backup completed %s ago", ageStr), ageSec
+		}
+		if cond.Type == "Failed" && cond.Status == "True" {
+			return "critical", fmt.Sprintf("Last backup failed %s ago: %s", ageStr, cond.Message), ageSec
 		}
 	}
 
-	if schedule.CreationTimestamp.Time.After(time.Now().Add(-5 * time.Minute)) {
-		return "ok", "Schedule recently created"
+	// No terminal condition yet — might be running
+	if age < 2*time.Hour {
+		return "ok", fmt.Sprintf("Backup in progress (%s ago)", ageStr), ageSec
+	}
+	if age > 48*time.Hour {
+		return "warning", fmt.Sprintf("No recent backup (last: %s ago)", ageStr), ageSec
 	}
 
-	return "unknown", "No status conditions available"
+	return "ok", fmt.Sprintf("Last backup: %s ago", ageStr), ageSec
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }

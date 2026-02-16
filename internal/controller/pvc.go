@@ -32,9 +32,7 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		if errors.IsNotFound(err) {
 			log.Info("PVC deleted, removing from TinyMon")
 			addr := resourceAddress("pvc", req.Namespace, req.Name)
-			if err := r.TinyMon.DeleteHost(addr); err != nil {
-				log.Error(err, "failed to delete host from TinyMon")
-			}
+			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -47,21 +45,29 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	addr := resourceAddress("pvc", pvc.Namespace, pvc.Name)
+	interval := checkInterval(pvc.Annotations, 60)
 	defaultTopic := pvc.Namespace + "/storage"
 	t := topic(pvc.Annotations)
 	if t == "" {
 		t = defaultTopic
 	}
 
-	size := ""
+	sizeStr := ""
+	var sizeGB float64
 	if s, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
-		size = s.String()
+		sizeStr = s.String()
+		sizeGB = float64(s.Value()) / (1024 * 1024 * 1024)
+	}
+
+	storageClass := ""
+	if pvc.Spec.StorageClassName != nil {
+		storageClass = *pvc.Spec.StorageClassName
 	}
 
 	host := tinymon.Host{
 		Name:        displayName(pvc.Annotations, pvc.Name),
 		Address:     addr,
-		Description: fmt.Sprintf("PVC %s/%s (%s)", pvc.Namespace, pvc.Name, size),
+		Description: fmt.Sprintf("PVC %s/%s (%s, %s)", pvc.Namespace, pvc.Name, sizeStr, storageClass),
 		Topic:       t,
 		Enabled:     1,
 	}
@@ -74,8 +80,8 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	check := tinymon.Check{
 		HostAddress:     addr,
-		Type:            "ping",
-		IntervalSeconds: 300,
+		Type:            "disk",
+		IntervalSeconds: interval,
 		Enabled:         1,
 	}
 	if err := r.TinyMon.UpsertCheck(check); err != nil {
@@ -83,30 +89,31 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	status, msg := pvcStatus(&pvc)
-	result := tinymon.Result{
+	status, msg := pvcStatus(&pvc, sizeStr, storageClass)
+	results := []tinymon.Result{{
 		HostAddress: addr,
-		CheckType:   "ping",
+		CheckType:   "disk",
 		Status:      status,
+		Value:       sizeGB,
 		Message:     msg,
-	}
-	if err := r.TinyMon.PushResult(result); err != nil {
-		log.Error(err, "failed to push result")
+	}}
+	if err := r.TinyMon.PushBulk(results); err != nil {
+		log.Error(err, "failed to push bulk results")
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func pvcStatus(pvc *corev1.PersistentVolumeClaim) (string, string) {
+func pvcStatus(pvc *corev1.PersistentVolumeClaim, size, storageClass string) (string, string) {
 	switch pvc.Status.Phase {
 	case corev1.ClaimBound:
-		return "ok", "PVC is Bound"
+		return "ok", fmt.Sprintf("Bound, %s (%s)", size, storageClass)
 	case corev1.ClaimPending:
-		return "warning", "PVC is Pending"
+		return "warning", fmt.Sprintf("Pending, %s (%s)", size, storageClass)
 	case corev1.ClaimLost:
-		return "critical", "PVC is Lost"
+		return "critical", fmt.Sprintf("Lost, %s (%s)", size, storageClass)
 	default:
-		return "unknown", fmt.Sprintf("PVC phase: %s", pvc.Status.Phase)
+		return "unknown", fmt.Sprintf("Phase: %s, %s (%s)", pvc.Status.Phase, size, storageClass)
 	}
 }

@@ -33,9 +33,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if errors.IsNotFound(err) {
 			log.Info("ingress deleted, removing from TinyMon")
 			addr := resourceAddress("ingress", req.Namespace, req.Name)
-			if err := r.TinyMon.DeleteHost(addr); err != nil {
-				log.Error(err, "failed to delete host from TinyMon")
-			}
+			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -48,6 +46,8 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	addr := resourceAddress("ingress", ingress.Namespace, ingress.Name)
+	httpInterval := checkInterval(ingress.Annotations, 300)
+	certInterval := checkInterval(ingress.Annotations, 3600)
 	defaultTopic := ingress.Namespace + "/ingresses"
 	t := topic(ingress.Annotations)
 	if t == "" {
@@ -69,13 +69,14 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	// Create pull checks (TinyMon executes these, no result push from operator)
 	for _, h := range hosts {
 		url := "https://" + h
 		check := tinymon.Check{
 			HostAddress:     addr,
 			Type:            "http",
 			Config:          map[string]interface{}{"url": url},
-			IntervalSeconds: 300,
+			IntervalSeconds: httpInterval,
 			Enabled:         1,
 		}
 		if err := r.TinyMon.UpsertCheck(check); err != nil {
@@ -89,7 +90,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 						HostAddress:     addr,
 						Type:            "certificate",
 						Config:          map[string]interface{}{"host": h, "port": 443},
-						IntervalSeconds: 3600,
+						IntervalSeconds: certInterval,
 						Enabled:         1,
 					}
 					if err := r.TinyMon.UpsertCheck(certCheck); err != nil {
