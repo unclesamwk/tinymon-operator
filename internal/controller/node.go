@@ -2,14 +2,15 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/unclesamwk/tinymon-operator/internal/tinymon"
 
-	"time"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/kubernetes"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,14 +19,15 @@ import (
 
 type NodeReconciler struct {
 	client.Client
-	TinyMon *tinymon.Client
-	Cluster string
+	TinyMon   *tinymon.Client
+	Cluster   string
+	Clientset kubernetes.Interface
 }
 
-func SetupNodeReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string) error {
+func SetupNodeReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string, cs kubernetes.Interface) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Node{}).
-		Complete(&NodeReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster})
+		Complete(&NodeReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster, Clientset: cs})
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -132,14 +134,9 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		})
 	}
 
-	// Disk check (from node conditions, no real usage available)
-	diskStatus, diskMsg := nodeDiskStatus(&node)
-	results = append(results, tinymon.Result{
-		HostAddress: addr,
-		CheckType:   "disk",
-		Status:      diskStatus,
-		Message:     diskMsg,
-	})
+	// Disk check via Kubelet Stats API
+	diskResult := r.fetchDiskUsage(ctx, node.Name, addr)
+	results = append(results, diskResult)
 
 	if len(results) > 0 {
 		if err := r.TinyMon.PushBulk(results); err != nil {
@@ -151,6 +148,67 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return ctrl.Result{RequeueAfter: time.Duration(interval) * time.Second}, nil
 }
 
+// kubeletStatsSummary represents the relevant parts of /stats/summary
+type kubeletStatsSummary struct {
+	Node struct {
+		Fs *struct {
+			AvailableBytes *int64 `json:"availableBytes"`
+			CapacityBytes  *int64 `json:"capacityBytes"`
+			UsedBytes      *int64 `json:"usedBytes"`
+		} `json:"fs"`
+	} `json:"node"`
+}
+
+func (r *NodeReconciler) fetchDiskUsage(ctx context.Context, nodeName, addr string) tinymon.Result {
+	raw, err := r.Clientset.CoreV1().RESTClient().
+		Get().
+		Resource("nodes").
+		Name(nodeName).
+		SubResource("proxy", "stats", "summary").
+		DoRaw(ctx)
+	if err != nil {
+		// Fallback: use DiskPressure condition
+		return tinymon.Result{
+			HostAddress: addr,
+			CheckType:   "disk",
+			Status:      "unknown",
+			Message:     fmt.Sprintf("Kubelet Stats unavailable: %v", err),
+		}
+	}
+
+	var stats kubeletStatsSummary
+	if err := json.Unmarshal(raw, &stats); err != nil {
+		return tinymon.Result{
+			HostAddress: addr,
+			CheckType:   "disk",
+			Status:      "unknown",
+			Message:     fmt.Sprintf("Failed to parse Kubelet Stats: %v", err),
+		}
+	}
+
+	fs := stats.Node.Fs
+	if fs == nil || fs.CapacityBytes == nil || fs.AvailableBytes == nil || *fs.CapacityBytes == 0 {
+		return tinymon.Result{
+			HostAddress: addr,
+			CheckType:   "disk",
+			Status:      "unknown",
+			Message:     "No filesystem data in Kubelet Stats",
+		}
+	}
+
+	usedBytes := *fs.CapacityBytes - *fs.AvailableBytes
+	pct := float64(usedBytes) / float64(*fs.CapacityBytes) * 100
+	status := thresholdStatus(pct)
+
+	return tinymon.Result{
+		HostAddress: addr,
+		CheckType:   "disk",
+		Status:      status,
+		Value:       pct,
+		Message:     fmt.Sprintf("%.1f%% used (%s / %s)", pct, formatBytes(usedBytes), formatBytes(*fs.CapacityBytes)),
+	}
+}
+
 func thresholdStatus(pct float64) string {
 	if pct >= 90 {
 		return "critical"
@@ -159,18 +217,6 @@ func thresholdStatus(pct float64) string {
 		return "warning"
 	}
 	return "ok"
-}
-
-func nodeDiskStatus(node *corev1.Node) (string, string) {
-	for _, cond := range node.Status.Conditions {
-		if cond.Type == corev1.NodeDiskPressure {
-			if cond.Status == corev1.ConditionTrue {
-				return "critical", fmt.Sprintf("DiskPressure: %s", cond.Message)
-			}
-			return "ok", "No disk pressure"
-		}
-	}
-	return "unknown", "DiskPressure condition not found"
 }
 
 func formatBytes(b int64) string {

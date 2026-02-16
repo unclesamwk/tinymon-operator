@@ -10,6 +10,7 @@ import (
 	k8upv1 "github.com/k8up-io/k8up/v2/api/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -60,7 +61,8 @@ func main() {
 
 	client := tinymon.NewClient(tinymonURL, apiKey)
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	restConfig := ctrl.GetConfigOrDie()
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                 scheme,
 		HealthProbeBindAddress: probeAddr,
 		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
@@ -70,7 +72,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := controller.SetupNodeReconciler(mgr, client, clusterName); err != nil {
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		log.Error(err, "unable to create kubernetes clientset")
+		os.Exit(1)
+	}
+
+	if err := controller.SetupNodeReconciler(mgr, client, clusterName, clientset); err != nil {
 		log.Error(err, "unable to setup node controller")
 		os.Exit(1)
 	}
