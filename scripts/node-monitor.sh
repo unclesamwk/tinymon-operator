@@ -144,7 +144,6 @@ collect_load() {
 }
 
 collect_disk_health() {
-  local results=""
   for dev in /host/sys/block/sd* /host/sys/block/nvme* /host/sys/block/mmcblk*; do
     [ -e "$dev" ] || continue
     local devname=$(basename "$dev")
@@ -154,35 +153,34 @@ collect_disk_health() {
     local smart_json
     smart_json=$(smartctl -jH "$devpath" 2>/dev/null) || true
 
+    # Skip devices without S.M.A.R.T. support (e.g. SD cards)
     if [ -z "$smart_json" ]; then
-      echo $(jq -cn \
-        --arg ha "$HOST_ADDRESS" \
-        --arg dev "$devname" \
-        --argjson cfg "$(jq -cn --arg d "$devname" '{device: $d}')" \
-        '{host_address: $ha, check_type: "disk_health", status: "unknown", message: "S.M.A.R.T. not available", config: $cfg}')
+      log "Skipping $devname: S.M.A.R.T. not available"
       continue
     fi
 
     local passed=$(echo "$smart_json" | jq -r '.smart_status.passed // empty' 2>/dev/null)
+
+    # Skip if smartctl ran but device doesn't provide health status
+    if [ -z "$passed" ]; then
+      log "Skipping $devname: no S.M.A.R.T. health status"
+      continue
+    fi
+
     local temp=$(echo "$smart_json" | jq -r '.temperature.current // empty' 2>/dev/null)
 
-    local status="unknown"
-    local msg="S.M.A.R.T. not supported"
+    local status="ok"
+    local msg="PASSED"
     local value="null"
 
-    if [ "$passed" = "true" ]; then
-      status="ok"
-      msg="PASSED"
-    elif [ "$passed" = "false" ]; then
+    if [ "$passed" = "false" ]; then
       status="critical"
       msg="FAILED"
     fi
 
     if [ -n "$temp" ] && [ "$temp" != "null" ]; then
       value="$temp"
-      if [ "$msg" != "S.M.A.R.T. not supported" ]; then
-        msg="${msg}, ${temp}°C"
-      fi
+      msg="${msg}, ${temp}°C"
     fi
 
     echo $(jq -cn \
