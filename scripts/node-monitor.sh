@@ -22,11 +22,11 @@ fmt_bytes() {
 }
 
 collect_disk() {
-  # Parse host mounts from /host/proc/mounts to find real filesystems
+  # Parse host mounts from /host/proc/1/mounts to find real filesystems
   local skip_fs="tmpfs|devtmpfs|overlay|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|autofs|securityfs|pstore|debugfs|tracefs|fusectl|configfs|devpts|mqueue|hugetlbfs|bpf|nsfs|fuse.lxcfs|binfmt_misc|shm"
 
   # Extract device + mountpoint, deduplicate by device (first mount wins = shortest path)
-  grep -vE "^[^ ]+ [^ ]+ ($skip_fs) " /host/proc/mounts 2>/dev/null \
+  grep -vE "^[^ ]+ [^ ]+ ($skip_fs) " /host/proc/1/mounts 2>/dev/null \
     | awk '{print $1, $2}' \
     | sort -k1,1 -k2,2 \
     | awk '!seen[$1]++' \
