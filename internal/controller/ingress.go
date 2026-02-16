@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"time"
 	"fmt"
 	"strings"
@@ -51,6 +52,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	httpInterval := checkInterval(ingress.Annotations, 300)
 	certInterval := checkInterval(ingress.Annotations, 3600)
 	t := defaultTopic(r.Cluster, "ingresses", ingress.Namespace, ingress.Annotations)
+	expectedStatus := expectedStatusCode(ingress.Annotations)
 
 	hosts := ingressHosts(&ingress)
 	host := tinymon.Host{
@@ -70,10 +72,14 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Create pull checks (TinyMon executes these, no result push from operator)
 	for _, h := range hosts {
 		url := "https://" + h
+		cfg := map[string]interface{}{"url": url}
+		if expectedStatus > 0 {
+			cfg["expected_status"] = expectedStatus
+		}
 		check := tinymon.Check{
 			HostAddress:     addr,
 			Type:            "http",
-			Config:          map[string]interface{}{"url": url},
+			Config:          cfg,
 			IntervalSeconds: httpInterval,
 			Enabled:         1,
 		}
@@ -100,6 +106,18 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	return ctrl.Result{RequeueAfter: time.Duration(httpInterval) * time.Second}, nil
+}
+
+func expectedStatusCode(annotations map[string]string) int {
+	if annotations == nil {
+		return 0
+	}
+	if v, ok := annotations[AnnotationExpectedStatus]; ok {
+		if i, err := strconv.Atoi(v); err == nil && i >= 100 && i < 600 {
+			return i
+		}
+	}
+	return 0
 }
 
 func ingressHosts(ingress *networkingv1.Ingress) []string {
