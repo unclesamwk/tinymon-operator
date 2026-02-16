@@ -2,5 +2,5 @@ apiVersion: v2
 name: tinymon-operator
 description: Kubernetes operator that syncs annotated resources to TinyMon
 type: application
-version: 0.2.13
-appVersion: "0.2.13"
+version: 0.2.14
+appVersion: "0.2.14"

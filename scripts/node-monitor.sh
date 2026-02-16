@@ -23,13 +23,15 @@ fmt_bytes() {
 
 collect_disk() {
   # Parse host mounts from /host/proc/mounts to find real filesystems
-  local skip_fs="tmpfs|devtmpfs|overlay|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|autofs|securityfs|pstore|debugfs|tracefs|fusectl|configfs|devpts|mqueue|hugetlbfs|bpf|nsfs|fuse.lxcfs"
+  local skip_fs="tmpfs|devtmpfs|overlay|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|autofs|securityfs|pstore|debugfs|tracefs|fusectl|configfs|devpts|mqueue|hugetlbfs|bpf|nsfs|fuse.lxcfs|binfmt_misc|shm"
 
+  # Extract device + mountpoint, deduplicate by device (first mount wins = shortest path)
   grep -vE "^[^ ]+ [^ ]+ ($skip_fs) " /host/proc/mounts 2>/dev/null \
-    | awk '{print $2}' \
-    | sort -u \
-    | while IFS= read -r host_mount; do
-        # Skip non-absolute paths
+    | awk '{print $1, $2}' \
+    | sort -k1,1 -k2,2 \
+    | awk '!seen[$1]++' \
+    | while IFS=' ' read -r device host_mount; do
+        # Skip non-absolute mount paths
         case "$host_mount" in /*) ;; *) continue ;; esac
 
         # The actual path inside the container
