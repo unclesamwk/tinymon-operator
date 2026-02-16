@@ -69,7 +69,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	check := tinymon.Check{
 		HostAddress:     addr,
-		Type:            "ping",
+		Type:            "status",
 		IntervalSeconds: interval,
 		Enabled:         1,
 	}
@@ -81,7 +81,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	status, msg := deploymentStatus(&deploy)
 	results := []tinymon.Result{{
 		HostAddress: addr,
-		CheckType:   "ping",
+		CheckType:   "status",
 		Status:      status,
 		Message:     msg,
 	}}

@@ -70,7 +70,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	check := tinymon.Check{
 		HostAddress:     addr,
-		Type:            "ping",
+		Type:            "status",
 		IntervalSeconds: interval,
 		Enabled:         1,
 	}
@@ -85,7 +85,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		log.Error(err, "failed to list backups")
 		results := []tinymon.Result{{
 			HostAddress: addr,
-			CheckType:   "ping",
+			CheckType:   "status",
 			Status:      "unknown",
 			Message:     "Failed to list backup objects",
 		}}
@@ -96,7 +96,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	status, msg, ageSec := lastBackupStatus(backupList.Items)
 	results := []tinymon.Result{{
 		HostAddress: addr,
-		CheckType:   "ping",
+		CheckType:   "status",
 		Status:      status,
 		Value:       ageSec,
 		Message:     msg,
