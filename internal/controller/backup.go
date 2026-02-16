@@ -106,7 +106,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: time.Duration(interval) * time.Second}, nil
 }
 
 func lastBackupStatus(backups []k8upv1.Backup) (string, string, float64) {

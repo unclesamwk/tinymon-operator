@@ -6,6 +6,8 @@ import (
 
 	"github.com/unclesamwk/tinymon-operator/internal/tinymon"
 
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -145,7 +147,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: time.Duration(interval) * time.Second}, nil
 }
 
 func thresholdStatus(pct float64) string {

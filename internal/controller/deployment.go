@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"time"
 	"fmt"
 
 	"github.com/unclesamwk/tinymon-operator/internal/tinymon"
@@ -89,7 +90,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: time.Duration(interval) * time.Second}, nil
 }
 
 func deploymentStatus(deploy *appsv1.Deployment) (string, string) {

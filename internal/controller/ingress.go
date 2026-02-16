@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"time"
 	"fmt"
 	"strings"
 
@@ -101,7 +102,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: time.Duration(httpInterval) * time.Second}, nil
 }
 
 func ingressHosts(ingress *networkingv1.Ingress) []string {

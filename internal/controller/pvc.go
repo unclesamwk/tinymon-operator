@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"time"
 	"fmt"
 
 	"github.com/unclesamwk/tinymon-operator/internal/tinymon"
@@ -102,7 +103,7 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: time.Duration(interval) * time.Second}, nil
 }
 
 func pvcStatus(pvc *corev1.PersistentVolumeClaim, size, storageClass string) (string, string) {
