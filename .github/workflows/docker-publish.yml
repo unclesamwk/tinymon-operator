@@ -89,8 +89,10 @@ jobs:
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta.outputs.json }}
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "${{ steps.meta.outputs.json }}") $(printf 'unclesamwk/tinymon-operator@sha256:%s ' *)
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") $(printf 'unclesamwk/tinymon-operator@sha256:%s ' *)
 
       - name: Inspect image
         run: docker buildx imagetools inspect unclesamwk/tinymon-operator:${{ steps.meta.outputs.version }}
