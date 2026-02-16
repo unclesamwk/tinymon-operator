@@ -8,7 +8,7 @@ Annotate your Kubernetes resources with `tinymon.io/enabled: "true"` and the ope
 
 | Resource | Check Types | Mode | Status Mapping |
 |----------|------------|------|-----------------|
-| **Node** | load, memory, disk | Push | CPU/Memory via Metrics API: ok <80%, warning 80-90%, critical >90%. Disk via DiskPressure condition. |
+| **Node** | load, memory, disk | Push | CPU/Memory via Metrics API: ok <80%, warning 80-90%, critical >90%. Disk via Kubelet Stats. |
 | **Deployment** | status | Push | All replicas ready = ok, partial = warning, none = critical |
 | **Ingress** | http, certificate, icecast_listeners | Pull | Created in TinyMon, executed by TinyMon (not pushed by operator) |
 | **PVC** | disk | Push | Bound = ok, Pending = warning, Lost = critical. Value: requested size in GB. |
@@ -17,16 +17,44 @@ Annotate your Kubernetes resources with `tinymon.io/enabled: "true"` and the ope
 **Push**: The operator pushes check results to TinyMon via the Bulk API.
 **Pull**: The operator only creates the checks in TinyMon. TinyMon executes them independently.
 
+## Node Monitor DaemonSet
+
+The operator includes an optional **Node Monitor DaemonSet** that runs on every node and collects real OS-level metrics, replacing the limited data from the Kubernetes Metrics API:
+
+| Metric | Source | What it measures |
+|--------|--------|------------------|
+| **Disk** | `df` via `/proc/1/mounts` | All real filesystems (root, boot, ZFS, NFS, ...) with per-mount usage |
+| **Memory** | `/proc/meminfo` | OS-level MemTotal / MemAvailable |
+| **Load** | `/proc/loadavg` | Real load average (1/5/15 min) normalized to CPU count |
+| **Disk Health** | `smartctl -jH` | S.M.A.R.T. health status and temperature per device |
+
+Devices without S.M.A.R.T. support (e.g. SD cards) are automatically skipped.
+
+### Enable the DaemonSet
+
+```bash
+helm install tinymon-operator tinymon-operator/tinymon-operator \
+  --set tinymon.url=https://mon.example.com \
+  --set tinymon.apiKey=your-push-api-key \
+  --set tinymon.clusterName=my-cluster \
+  --set nodeMonitor.enabled=true
+```
+
+The DaemonSet runs a lightweight Alpine container with curl, jq, and smartmontools. It requires `privileged: true` for S.M.A.R.T. access and mounts the host root filesystem read-only at /host.
+
+When the DaemonSet is active, it pushes more accurate values than the operator's Metrics API fallback. Both can run simultaneously -- the DaemonSet's newer results take precedence.
+
 ## Annotations
 
-| Annotation | Description | Default |
-|-----------|-------------|---------|
-| `tinymon.io/enabled` | Enable monitoring (`"true"` to activate) | - |
-| `tinymon.io/name` | Display name in TinyMon | Resource name |
-| `tinymon.io/topic` | Topic/group in TinyMon | `Kubernetes/<cluster>/<kind>/<namespace>` |
-| `tinymon.io/check-interval` | Check interval in seconds (minimum 30) | 60 (Ingress HTTP: 300, Certificate: 3600) |
-| `tinymon.io/expected-status` | Expected HTTP status code for Ingress checks | 200 |
-| `tinymon.io/icecast-mounts` | Comma-separated Icecast mountpoints (creates icecast_listeners checks) | - |
+| Annotation | Description | Default | Resources |
+|-----------|-------------|---------|-----------|
+| `tinymon.io/enabled` | Enable monitoring ("true" to activate) | - | All |
+| `tinymon.io/name` | Display name in TinyMon | Resource name | All |
+| `tinymon.io/topic` | Topic/group in TinyMon | Kubernetes/cluster/kind/namespace | All |
+| `tinymon.io/check-interval` | Check interval in seconds (minimum 30) | 60 (Ingress HTTP: 300, Certificate: 3600) | All |
+| `tinymon.io/expected-status` | Expected HTTP status code for Ingress checks | 200 | Ingress |
+| `tinymon.io/http-path` | Path to append to HTTP check URL (e.g. /docs) | / (root) | Ingress |
+| `tinymon.io/icecast-mounts` | Comma-separated Icecast mountpoints | - | Ingress |
 
 ## Installation
 
@@ -46,7 +74,9 @@ helm install tinymon-operator tinymon-operator/tinymon-operator \
   --set tinymon.clusterName=my-cluster
 ```
 
-### Example
+### Examples
+
+**Deployment monitoring:**
 
 ```yaml
 apiVersion: apps/v1
@@ -63,23 +93,28 @@ spec:
   # ...
 ```
 
-This creates a host in TinyMon with address `k8s://my-cluster/deployments/default/my-app` and a status check that reports replica readiness every 120 seconds.
+Creates a host k8s://my-cluster/deployments/default/my-app with a status check that reports replica readiness every 120 seconds.
+
+**Ingress with custom path and expected status:**
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: my-ingress
+  name: api
   annotations:
     tinymon.io/enabled: "true"
-    tinymon.io/expected-status: "301"
+    tinymon.io/http-path: "/docs"
+    tinymon.io/expected-status: "200"
 spec:
   rules:
-    - host: example.com
+    - host: api.example.com
       # ...
 ```
 
-This creates HTTP and certificate checks in TinyMon for each host in the Ingress. TinyMon executes these checks itself (pull mode). The expected HTTP status code is set to 301.
+Creates an HTTP check for https://api.example.com/docs expecting status 200, plus a certificate check.
+
+**Ingress with Icecast listener monitoring:**
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -95,7 +130,7 @@ spec:
       # ...
 ```
 
-This additionally creates `icecast_listeners` checks for each mountpoint (`/stream` and `/live`). TinyMon monitors listener counts via the Icecast status page.
+Creates icecast_listeners checks for each mountpoint in addition to the HTTP and certificate checks.
 
 ## Configuration
 
@@ -104,8 +139,13 @@ This additionally creates `icecast_listeners` checks for each mountpoint (`/stre
 | `tinymon.url` | TinyMon instance URL | (required) |
 | `tinymon.apiKey` | Push API key | (required) |
 | `tinymon.clusterName` | Cluster name used in addresses and topics | (required) |
-| `image.repository` | Operator image | `unclesamwk/tinymon-operator` |
+| `image.repository` | Operator image | unclesamwk/tinymon-operator |
 | `image.tag` | Image tag | appVersion |
+| `nodeMonitor.enabled` | Enable Node Monitor DaemonSet | false |
+| `nodeMonitor.image.repository` | Node Monitor image | unclesamwk/tinymon-node-monitor |
+| `nodeMonitor.image.tag` | Node Monitor image tag | appVersion |
+| `nodeMonitor.interval` | Collection interval in seconds | 60 |
+| `nodeMonitor.resources` | Resource requests/limits for DaemonSet pods | 10m-50m CPU, 16-32Mi memory |
 
 ## RBAC
 
@@ -113,11 +153,11 @@ The operator requires the following cluster-level permissions:
 
 | API Group | Resources | Verbs |
 |-----------|-----------|-------|
-| `""` | nodes, persistentvolumeclaims | get, list, watch |
-| `apps` | deployments | get, list, watch |
-| `networking.k8s.io` | ingresses | get, list, watch |
-| `k8up.io` | schedules, backups | get, list, watch |
-| `metrics.k8s.io` | nodes | get, list |
+| "" | nodes, persistentvolumeclaims | get, list, watch |
+| apps | deployments | get, list, watch |
+| networking.k8s.io | ingresses | get, list, watch |
+| k8up.io | schedules, backups | get, list, watch |
+| metrics.k8s.io | nodes | get, list |
 
 ## How It Works
 
