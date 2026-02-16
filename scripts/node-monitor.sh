@@ -9,7 +9,7 @@ set -eu
 
 HOST_ADDRESS="k8s://${CLUSTER_NAME}/node/${NODE_NAME}"
 
-log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
+log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >&2; }
 
 # Format bytes to human-readable (Gi / Mi)
 fmt_bytes() {
