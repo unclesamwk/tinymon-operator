@@ -22,19 +22,31 @@ fmt_bytes() {
 }
 
 collect_disk() {
-  local results=""
-  # All real filesystems, skip virtual ones
-  df -T -x tmpfs -x devtmpfs -x overlay -x squashfs -x iso9660 2>/dev/null \
-    | tail -n +2 \
-    | while IFS= read -r line; do
-        local mount=$(echo "$line" | awk '{print $NF}')
-        local total=$(echo "$line" | awk '{print $3}')
-        local used=$(echo "$line" | awk '{print $4}')
-        local pct_raw=$(echo "$line" | awk '{print $6}' | tr -d '%')
+  # Parse host mounts from /host/proc/mounts to find real filesystems
+  local skip_fs="tmpfs|devtmpfs|overlay|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|autofs|securityfs|pstore|debugfs|tracefs|fusectl|configfs|devpts|mqueue|hugetlbfs|bpf|nsfs|fuse.lxcfs"
 
-        # Skip if inside /host prefix for display
-        local display_mount="$mount"
-        case "$mount" in /host/*) display_mount="${mount#/host}" ;; esac
+  grep -vE "^[^ ]+ [^ ]+ ($skip_fs) " /host/proc/mounts 2>/dev/null \
+    | awk '{print $2}' \
+    | sort -u \
+    | while IFS= read -r host_mount; do
+        # Skip non-absolute paths
+        case "$host_mount" in /*) ;; *) continue ;; esac
+
+        # The actual path inside the container
+        local container_path="/host${host_mount}"
+        [ -d "$container_path" ] || continue
+
+        # Use df on the container path
+        local df_line
+        df_line=$(df -k "$container_path" 2>/dev/null | tail -n 1) || continue
+
+        local total=$(echo "$df_line" | awk '{print $2}')
+        local used=$(echo "$df_line" | awk '{print $3}')
+
+        # Skip if total is 0 or not a number
+        [ "$total" -gt 0 ] 2>/dev/null || continue
+
+        local pct_raw=$(awk "BEGIN { printf \"%.0f\", $used / $total * 100 }")
 
         local total_bytes=$((total * 1024))
         local used_bytes=$((used * 1024))
@@ -46,6 +58,7 @@ collect_disk() {
         elif [ "$pct_raw" -ge 80 ]; then status="warning"
         fi
 
+        local display_mount="$host_mount"
         local config=$(jq -cn --arg m "$display_mount" '{mount: $m}')
         echo $(jq -cn \
           --arg ha "$HOST_ADDRESS" \
