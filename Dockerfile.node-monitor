@@ -1,0 +1,5 @@
+FROM alpine:3.20
+RUN apk add --no-cache curl jq smartmontools
+COPY scripts/node-monitor.sh /usr/local/bin/node-monitor.sh
+RUN chmod +x /usr/local/bin/node-monitor.sh
+ENTRYPOINT ["/usr/local/bin/node-monitor.sh"]

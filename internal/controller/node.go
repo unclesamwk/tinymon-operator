@@ -68,7 +68,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// Upsert checks: load, memory, disk
-	for _, checkType := range []string{"load", "memory", "disk"} {
+	for _, checkType := range []string{"load", "memory", "disk", "disk_health"} {
 		check := tinymon.Check{
 			HostAddress:     addr,
 			Type:            checkType,

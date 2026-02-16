@@ -1,0 +1,66 @@
+{{- if .Values.nodeMonitor.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "tinymon-operator.fullname" . }}-node-monitor
+  labels:
+    {{- include "tinymon-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node-monitor
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tinymon-node-monitor
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tinymon-node-monitor
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ include "tinymon-operator.serviceAccountName" . }}
+      containers:
+        - name: node-monitor
+          image: "{{ .Values.nodeMonitor.image.repository }}:{{ .Values.nodeMonitor.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: true
+          env:
+            - name: TINYMON_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tinymon-operator.fullname" . }}
+                  key: tinymon-url
+            - name: TINYMON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tinymon-operator.fullname" . }}
+                  key: tinymon-api-key
+            {{- if .Values.tinymon.clusterName }}
+            - name: CLUSTER_NAME
+              value: {{ .Values.tinymon.clusterName | quote }}
+            {{- end }}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: INTERVAL
+              value: {{ .Values.nodeMonitor.interval | quote }}
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+              readOnly: true
+            - name: host-dev
+              mountPath: /dev
+              readOnly: true
+          resources:
+            {{- toYaml .Values.nodeMonitor.resources | nindent 12 }}
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+        - name: host-dev
+          hostPath:
+            path: /dev
+      tolerations:
+        - operator: Exists
+{{- end }}
