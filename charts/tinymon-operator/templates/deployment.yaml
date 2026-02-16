@@ -30,6 +30,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "tinymon-operator.fullname" . }}
                   key: tinymon-api-key
+            {{- if .Values.tinymon.clusterName }}
+            - name: CLUSTER_NAME
+              value: {{ .Values.tinymon.clusterName | quote }}
+            {{- end }}
           ports:
             - name: metrics
               containerPort: 8080

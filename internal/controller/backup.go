@@ -18,12 +18,13 @@ import (
 type BackupReconciler struct {
 	client.Client
 	TinyMon *tinymon.Client
+	Cluster string
 }
 
-func SetupBackupReconciler(mgr ctrl.Manager, tm *tinymon.Client) error {
+func SetupBackupReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&k8upv1.Schedule{}).
-		Complete(&BackupReconciler{Client: mgr.GetClient(), TinyMon: tm})
+		Complete(&BackupReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster})
 }
 
 func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -33,7 +34,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.Get(ctx, req.NamespacedName, &schedule); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("K8up Schedule deleted, removing from TinyMon")
-			addr := resourceAddress("backup", req.Namespace, req.Name)
+			addr := resourceAddress(r.Cluster, "backup", req.Namespace, req.Name)
 			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
@@ -41,18 +42,14 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if !isEnabled(schedule.Annotations) {
-		addr := resourceAddress("backup", schedule.Namespace, schedule.Name)
+		addr := resourceAddress(r.Cluster, "backup", schedule.Namespace, schedule.Name)
 		_ = r.TinyMon.DeleteHost(addr)
 		return ctrl.Result{}, nil
 	}
 
-	addr := resourceAddress("backup", schedule.Namespace, schedule.Name)
+	addr := resourceAddress(r.Cluster, "backup", schedule.Namespace, schedule.Name)
 	interval := checkInterval(schedule.Annotations, 60)
-	defaultTopic := schedule.Namespace + "/backups"
-	t := topic(schedule.Annotations)
-	if t == "" {
-		t = defaultTopic
-	}
+	t := defaultTopic(r.Cluster, schedule.Namespace, "backups", schedule.Annotations)
 
 	host := tinymon.Host{
 		Name:        displayName(schedule.Annotations, schedule.Name),

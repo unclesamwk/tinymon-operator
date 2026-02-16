@@ -17,12 +17,13 @@ import (
 type DeploymentReconciler struct {
 	client.Client
 	TinyMon *tinymon.Client
+	Cluster string
 }
 
-func SetupDeploymentReconciler(mgr ctrl.Manager, tm *tinymon.Client) error {
+func SetupDeploymentReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1.Deployment{}).
-		Complete(&DeploymentReconciler{Client: mgr.GetClient(), TinyMon: tm})
+		Complete(&DeploymentReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster})
 }
 
 func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -32,7 +33,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.Get(ctx, req.NamespacedName, &deploy); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("deployment deleted, removing from TinyMon")
-			addr := resourceAddress("deployment", req.Namespace, req.Name)
+			addr := resourceAddress(r.Cluster, "deployment", req.Namespace, req.Name)
 			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
@@ -40,18 +41,14 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if !isEnabled(deploy.Annotations) {
-		addr := resourceAddress("deployment", deploy.Namespace, deploy.Name)
+		addr := resourceAddress(r.Cluster, "deployment", deploy.Namespace, deploy.Name)
 		_ = r.TinyMon.DeleteHost(addr)
 		return ctrl.Result{}, nil
 	}
 
-	addr := resourceAddress("deployment", deploy.Namespace, deploy.Name)
+	addr := resourceAddress(r.Cluster, "deployment", deploy.Namespace, deploy.Name)
 	interval := checkInterval(deploy.Annotations, 60)
-	defaultTopic := deploy.Namespace + "/deployments"
-	t := topic(deploy.Annotations)
-	if t == "" {
-		t = defaultTopic
-	}
+	t := defaultTopic(r.Cluster, deploy.Namespace, "deployments", deploy.Annotations)
 
 	host := tinymon.Host{
 		Name:        displayName(deploy.Annotations, deploy.Name),

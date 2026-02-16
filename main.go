@@ -52,6 +52,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	clusterName := os.Getenv("CLUSTER_NAME")
+	if clusterName == "" {
+		clusterName = "default"
+	}
+
 	client := tinymon.NewClient(tinymonURL, apiKey)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -64,23 +69,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := controller.SetupNodeReconciler(mgr, client); err != nil {
+	if err := controller.SetupNodeReconciler(mgr, client, clusterName); err != nil {
 		log.Error(err, "unable to setup node controller")
 		os.Exit(1)
 	}
-	if err := controller.SetupDeploymentReconciler(mgr, client); err != nil {
+	if err := controller.SetupDeploymentReconciler(mgr, client, clusterName); err != nil {
 		log.Error(err, "unable to setup deployment controller")
 		os.Exit(1)
 	}
-	if err := controller.SetupIngressReconciler(mgr, client); err != nil {
+	if err := controller.SetupIngressReconciler(mgr, client, clusterName); err != nil {
 		log.Error(err, "unable to setup ingress controller")
 		os.Exit(1)
 	}
-	if err := controller.SetupPVCReconciler(mgr, client); err != nil {
+	if err := controller.SetupPVCReconciler(mgr, client, clusterName); err != nil {
 		log.Error(err, "unable to setup pvc controller")
 		os.Exit(1)
 	}
-	if err := controller.SetupBackupReconciler(mgr, client); err != nil {
+	if err := controller.SetupBackupReconciler(mgr, client, clusterName); err != nil {
 		log.Error(err, "unable to setup backup controller")
 		os.Exit(1)
 	}
@@ -94,7 +99,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Info("starting manager", "tinymonURL", tinymonURL)
+	log.Info("starting manager", "tinymonURL", tinymonURL, "cluster", clusterName)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Error(err, "problem running manager")
 		os.Exit(1)

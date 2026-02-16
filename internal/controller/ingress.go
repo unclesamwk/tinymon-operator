@@ -18,12 +18,13 @@ import (
 type IngressReconciler struct {
 	client.Client
 	TinyMon *tinymon.Client
+	Cluster string
 }
 
-func SetupIngressReconciler(mgr ctrl.Manager, tm *tinymon.Client) error {
+func SetupIngressReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1.Ingress{}).
-		Complete(&IngressReconciler{Client: mgr.GetClient(), TinyMon: tm})
+		Complete(&IngressReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster})
 }
 
 func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -33,7 +34,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.Get(ctx, req.NamespacedName, &ingress); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("ingress deleted, removing from TinyMon")
-			addr := resourceAddress("ingress", req.Namespace, req.Name)
+			addr := resourceAddress(r.Cluster, "ingress", req.Namespace, req.Name)
 			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
@@ -41,19 +42,15 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if !isEnabled(ingress.Annotations) {
-		addr := resourceAddress("ingress", ingress.Namespace, ingress.Name)
+		addr := resourceAddress(r.Cluster, "ingress", ingress.Namespace, ingress.Name)
 		_ = r.TinyMon.DeleteHost(addr)
 		return ctrl.Result{}, nil
 	}
 
-	addr := resourceAddress("ingress", ingress.Namespace, ingress.Name)
+	addr := resourceAddress(r.Cluster, "ingress", ingress.Namespace, ingress.Name)
 	httpInterval := checkInterval(ingress.Annotations, 300)
 	certInterval := checkInterval(ingress.Annotations, 3600)
-	defaultTopic := ingress.Namespace + "/ingresses"
-	t := topic(ingress.Annotations)
-	if t == "" {
-		t = defaultTopic
-	}
+	t := defaultTopic(r.Cluster, ingress.Namespace, "ingresses", ingress.Annotations)
 
 	hosts := ingressHosts(&ingress)
 	host := tinymon.Host{

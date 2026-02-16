@@ -9,11 +9,21 @@ const (
 	AnnotationCheckInterval = "tinymon.io/check-interval"
 )
 
-func resourceAddress(kind, namespace, name string) string {
+func resourceAddress(cluster, kind, namespace, name string) string {
 	if namespace == "" {
-		return "k8s://" + kind + "/" + name
+		return "k8s://" + cluster + "/" + kind + "/" + name
 	}
-	return "k8s://" + kind + "/" + namespace + "/" + name
+	return "k8s://" + cluster + "/" + kind + "/" + namespace + "/" + name
+}
+
+func defaultTopic(cluster, namespace, kind string, annotations map[string]string) string {
+	if annotations != nil && annotations[AnnotationTopic] != "" {
+		return annotations[AnnotationTopic]
+	}
+	if namespace == "" {
+		return "Kubernetes/" + cluster + "/" + kind
+	}
+	return "Kubernetes/" + cluster + "/" + namespace
 }
 
 func isEnabled(annotations map[string]string) bool {
@@ -28,13 +38,6 @@ func displayName(annotations map[string]string, fallback string) string {
 		return annotations[AnnotationName]
 	}
 	return fallback
-}
-
-func topic(annotations map[string]string) string {
-	if annotations == nil {
-		return ""
-	}
-	return annotations[AnnotationTopic]
 }
 
 func checkInterval(annotations map[string]string, defaultInterval int) int {

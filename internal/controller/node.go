@@ -19,12 +19,13 @@ import (
 type NodeReconciler struct {
 	client.Client
 	TinyMon *tinymon.Client
+	Cluster string
 }
 
-func SetupNodeReconciler(mgr ctrl.Manager, tm *tinymon.Client) error {
+func SetupNodeReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Node{}).
-		Complete(&NodeReconciler{Client: mgr.GetClient(), TinyMon: tm})
+		Complete(&NodeReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster})
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -34,7 +35,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("node deleted, removing from TinyMon")
-			addr := resourceAddress("node", "", req.Name)
+			addr := resourceAddress(r.Cluster, "node", "", req.Name)
 			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
@@ -42,19 +43,19 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if !isEnabled(node.Annotations) {
-		addr := resourceAddress("node", "", node.Name)
+		addr := resourceAddress(r.Cluster, "node", "", node.Name)
 		_ = r.TinyMon.DeleteHost(addr)
 		return ctrl.Result{}, nil
 	}
 
-	addr := resourceAddress("node", "", node.Name)
+	addr := resourceAddress(r.Cluster, "node", "", node.Name)
 	interval := checkInterval(node.Annotations, 60)
 
 	host := tinymon.Host{
 		Name:        displayName(node.Annotations, node.Name),
 		Address:     addr,
 		Description: fmt.Sprintf("Kubernetes Node %s", node.Name),
-		Topic:       topic(node.Annotations),
+		Topic:       defaultTopic(r.Cluster, "", "nodes", node.Annotations),
 		Enabled:     1,
 	}
 

@@ -17,12 +17,13 @@ import (
 type PVCReconciler struct {
 	client.Client
 	TinyMon *tinymon.Client
+	Cluster string
 }
 
-func SetupPVCReconciler(mgr ctrl.Manager, tm *tinymon.Client) error {
+func SetupPVCReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.PersistentVolumeClaim{}).
-		Complete(&PVCReconciler{Client: mgr.GetClient(), TinyMon: tm})
+		Complete(&PVCReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster})
 }
 
 func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -32,7 +33,7 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if err := r.Get(ctx, req.NamespacedName, &pvc); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("PVC deleted, removing from TinyMon")
-			addr := resourceAddress("pvc", req.Namespace, req.Name)
+			addr := resourceAddress(r.Cluster, "pvc", req.Namespace, req.Name)
 			_ = r.TinyMon.DeleteHost(addr)
 			return ctrl.Result{}, nil
 		}
@@ -40,18 +41,14 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	if !isEnabled(pvc.Annotations) {
-		addr := resourceAddress("pvc", pvc.Namespace, pvc.Name)
+		addr := resourceAddress(r.Cluster, "pvc", pvc.Namespace, pvc.Name)
 		_ = r.TinyMon.DeleteHost(addr)
 		return ctrl.Result{}, nil
 	}
 
-	addr := resourceAddress("pvc", pvc.Namespace, pvc.Name)
+	addr := resourceAddress(r.Cluster, "pvc", pvc.Namespace, pvc.Name)
 	interval := checkInterval(pvc.Annotations, 60)
-	defaultTopic := pvc.Namespace + "/storage"
-	t := topic(pvc.Annotations)
-	if t == "" {
-		t = defaultTopic
-	}
+	t := defaultTopic(r.Cluster, pvc.Namespace, "storage", pvc.Annotations)
 
 	sizeStr := ""
 	var sizeGB float64
