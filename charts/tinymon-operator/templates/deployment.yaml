@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tinymon-operator.fullname" . }}
+  labels:
+    {{- include "tinymon-operator.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tinymon-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tinymon-operator.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "tinymon-operator.serviceAccountName" . }}
+      containers:
+        - name: operator
+          image: {{ include "tinymon-operator.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TINYMON_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tinymon-operator.fullname" . }}
+                  key: tinymon-url
+            - name: TINYMON_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tinymon-operator.fullname" . }}
+                  key: tinymon-api-key
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
