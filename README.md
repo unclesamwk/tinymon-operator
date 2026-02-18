@@ -188,4 +188,4 @@ Ideas, bug reports, and pull requests are welcome. Open an issue on GitHub if yo
 
 ## License
 
-MIT
+[MIT](LICENSE)
