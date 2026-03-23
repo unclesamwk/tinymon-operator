@@ -26,11 +26,12 @@ func NewClient(baseURL, apiKey string) *Client {
 }
 
 type Host struct {
-	Name        string `json:"name"`
-	Address     string `json:"address"`
-	Description string `json:"description,omitempty"`
-	Topic       string `json:"topic,omitempty"`
-	Enabled     int    `json:"enabled"`
+	Name        string            `json:"name"`
+	Address     string            `json:"address"`
+	Description string            `json:"description,omitempty"`
+	Topic       string            `json:"topic,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Enabled     int               `json:"enabled"`
 }
 
 type Check struct {

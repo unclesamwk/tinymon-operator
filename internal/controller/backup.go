@@ -56,6 +56,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		Address:     addr,
 		Description: fmt.Sprintf("K8up Schedule %s/%s", schedule.Namespace, schedule.Name),
 		Topic:       t,
+		Labels:      extractLabels(schedule.Labels),
 		Enabled:     1,
 	}
 

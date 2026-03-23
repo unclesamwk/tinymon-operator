@@ -1,6 +1,9 @@
 package controller
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 const (
 	AnnotationEnabled       = "tinymon.io/enabled"
@@ -10,6 +13,8 @@ const (
 	AnnotationExpectedStatus = "tinymon.io/expected-status"
 	AnnotationIcecastMounts  = "tinymon.io/icecast-mounts"
 	AnnotationHTTPPath       = "tinymon.io/http-path"
+
+	LabelPrefix = "tinymon.io/label-"
 )
 
 func resourceAddress(cluster, kind, namespace, name string) string {
@@ -53,4 +58,25 @@ func checkInterval(annotations map[string]string, defaultInterval int) int {
 		}
 	}
 	return defaultInterval
+}
+
+// extractLabels extracts Kubernetes labels with prefix "tinymon.io/label-"
+// and returns a clean map with the prefix stripped.
+func extractLabels(labels map[string]string) map[string]string {
+	if labels == nil {
+		return nil
+	}
+	result := make(map[string]string)
+	for k, v := range labels {
+		if strings.HasPrefix(k, LabelPrefix) {
+			key := strings.TrimPrefix(k, LabelPrefix)
+			if key != "" {
+				result[key] = v
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }

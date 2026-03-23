@@ -67,6 +67,7 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		Address:     addr,
 		Description: fmt.Sprintf("PVC %s/%s (%s, %s)", pvc.Namespace, pvc.Name, sizeStr, storageClass),
 		Topic:       t,
+		Labels:      extractLabels(pvc.Labels),
 		Enabled:     1,
 	}
 
