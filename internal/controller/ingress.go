@@ -60,7 +60,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		Address:     addr,
 		Description: fmt.Sprintf("Ingress %s/%s (%s)", ingress.Namespace, ingress.Name, strings.Join(hosts, ", ")),
 		Topic:       t,
-		Labels:      buildLabels(r.Cluster, "web", ingress.Labels),
+		Labels:      buildLabels(r.Cluster, ingressType(ingress.Annotations), ingress.Labels),
 		Enabled:     1,
 	}
 
@@ -149,6 +149,14 @@ func expectedStatusCode(annotations map[string]string) int {
 		}
 	}
 	return 0
+}
+
+// ingressType returns "icecast" if the ingress has icecast-mounts annotation, otherwise "web".
+func ingressType(annotations map[string]string) string {
+	if annotations != nil && annotations[AnnotationIcecastMounts] != "" {
+		return "icecast"
+	}
+	return "web"
 }
 
 func ingressHosts(ingress *networkingv1.Ingress) []string {
