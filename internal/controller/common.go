@@ -80,3 +80,19 @@ func extractLabels(labels map[string]string) map[string]string {
 	}
 	return result
 }
+
+// buildLabels creates the labels map for a host by combining:
+// - auto-generated labels (cluster, type)
+// - user-defined labels from K8s labels with "tinymon.io/label-" prefix
+// User-defined labels take precedence over auto-generated ones.
+func buildLabels(cluster string, resourceType string, k8sLabels map[string]string) map[string]string {
+	result := map[string]string{
+		"cluster": cluster,
+		"type":    resourceType,
+	}
+	// User-defined labels override auto-generated ones
+	for k, v := range extractLabels(k8sLabels) {
+		result[k] = v
+	}
+	return result
+}

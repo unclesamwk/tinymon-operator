@@ -60,7 +60,7 @@ func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		Address:     addr,
 		Description: fmt.Sprintf("Ingress %s/%s (%s)", ingress.Namespace, ingress.Name, strings.Join(hosts, ", ")),
 		Topic:       t,
-		Labels:      extractLabels(ingress.Labels),
+		Labels:      buildLabels(r.Cluster, "web", ingress.Labels),
 		Enabled:     1,
 	}
 

@@ -58,7 +58,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		Address:     addr,
 		Description: fmt.Sprintf("Kubernetes Node %s", node.Name),
 		Topic:       defaultTopic(r.Cluster, "nodes", "", node.Annotations),
-		Labels:      extractLabels(node.Labels),
+		Labels:      buildLabels(r.Cluster, "node", node.Labels),
 		Enabled:     1,
 	}
 

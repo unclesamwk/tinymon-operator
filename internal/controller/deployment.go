@@ -55,7 +55,7 @@ func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Address:     addr,
 		Description: fmt.Sprintf("Deployment %s/%s", deploy.Namespace, deploy.Name),
 		Topic:       t,
-		Labels:      extractLabels(deploy.Labels),
+		Labels:      buildLabels(r.Cluster, "app", deploy.Labels),
 		Enabled:     1,
 	}
 
