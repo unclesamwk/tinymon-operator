@@ -46,6 +46,14 @@ spec:
                   fieldPath: spec.nodeName
             - name: INTERVAL
               value: {{ .Values.nodeMonitor.interval | quote }}
+            {{- if .Values.nodeMonitor.diskIncludeMounts }}
+            - name: DISK_INCLUDE_MOUNTS
+              value: {{ .Values.nodeMonitor.diskIncludeMounts | quote }}
+            {{- end }}
+            {{- if .Values.nodeMonitor.diskExcludeMounts }}
+            - name: DISK_EXCLUDE_MOUNTS
+              value: {{ .Values.nodeMonitor.diskExcludeMounts | quote }}
+            {{- end }}
           volumeMounts:
             - name: host-root
               mountPath: /host

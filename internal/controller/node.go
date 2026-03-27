@@ -10,8 +10,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
-	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -81,15 +81,13 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	// Get node metrics
+	// Get node metrics via direct REST call (not via cache, to avoid watch errors)
 	var results []tinymon.Result
 
-	var nodeMetrics metricsv1beta1.NodeMetrics
-	metricsErr := r.Get(ctx, client.ObjectKey{Name: node.Name}, &nodeMetrics)
+	usedCPU, usedMem, metricsErr := r.fetchNodeMetrics(ctx, node.Name)
 
 	// Memory check
 	if metricsErr == nil {
-		usedMem := nodeMetrics.Usage.Memory().Value()
 		allocMem := node.Status.Allocatable.Memory().Value()
 		if allocMem > 0 {
 			pct := float64(usedMem) / float64(allocMem) * 100
@@ -113,7 +111,6 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	// Load (CPU) check
 	if metricsErr == nil {
-		usedCPU := nodeMetrics.Usage.Cpu().MilliValue()
 		allocCPU := node.Status.Allocatable.Cpu().MilliValue()
 		if allocCPU > 0 {
 			pct := float64(usedCPU) / float64(allocCPU) * 100
@@ -205,6 +202,35 @@ func (r *NodeReconciler) fetchDiskUsage(ctx context.Context, nodeName, addr stri
 		Value:       pct,
 		Message:     fmt.Sprintf("%.1f%% used (%s / %s)", pct, formatBytes(usedBytes), formatBytes(*fs.CapacityBytes)),
 	}
+}
+
+// nodeMetricsResponse represents the relevant parts of the metrics API response.
+type nodeMetricsResponse struct {
+	Usage struct {
+		CPU    string `json:"cpu"`
+		Memory string `json:"memory"`
+	} `json:"usage"`
+}
+
+// fetchNodeMetrics retrieves CPU and memory usage via a direct REST call to the
+// metrics API, avoiding controller-runtime's cache which requires watch support.
+func (r *NodeReconciler) fetchNodeMetrics(ctx context.Context, nodeName string) (cpuMilli int64, memBytes int64, err error) {
+	raw, err := r.Clientset.CoreV1().RESTClient().
+		Get().
+		AbsPath("/apis/metrics.k8s.io/v1beta1/nodes/" + nodeName).
+		DoRaw(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var metrics nodeMetricsResponse
+	if err := json.Unmarshal(raw, &metrics); err != nil {
+		return 0, 0, err
+	}
+
+	cpuQ := resource.MustParse(metrics.Usage.CPU)
+	memQ := resource.MustParse(metrics.Usage.Memory)
+	return cpuQ.MilliValue(), memQ.Value(), nil
 }
 
 func thresholdStatus(pct float64) string {

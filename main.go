@@ -17,7 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	// metricsv1beta1 removed from scheme — metrics are fetched via REST client in node controller
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -29,7 +29,8 @@ var scheme = runtime.NewScheme()
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(k8upv1.AddToScheme(scheme))
-	utilruntime.Must(metricsv1beta1.AddToScheme(scheme))
+	// metricsv1beta1 intentionally not added to scheme — causes watch errors on clusters
+	// where metrics-server doesn't support watch. Metrics are fetched via direct REST calls.
 }
 
 func main() {

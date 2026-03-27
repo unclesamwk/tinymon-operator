@@ -25,14 +25,35 @@ collect_disk() {
   # Parse host mounts from /host/proc/1/mounts to find real filesystems
   local skip_fs="tmpfs|devtmpfs|overlay|squashfs|iso9660|proc|sysfs|cgroup|cgroup2|autofs|securityfs|pstore|debugfs|tracefs|fusectl|configfs|devpts|mqueue|hugetlbfs|bpf|nsfs|fuse.lxcfs|binfmt_misc|shm"
 
-  # Extract device + mountpoint, deduplicate by device (first mount wins = shortest path)
+  # DISK_INCLUDE_MOUNTS: comma-separated list of mount prefixes to include (default: all)
+  # DISK_EXCLUDE_MOUNTS: comma-separated list of mount prefixes to exclude (default: none)
+  # If DISK_INCLUDE_MOUNTS is set, only matching mounts are reported.
+  # Example: DISK_INCLUDE_MOUNTS="/,/data,/fast" — only root, /data and /fast pool roots
+
+  # Extract device + mountpoint + fstype, deduplicate by device (first mount wins = shortest path)
   grep -vE "^[^ ]+ [^ ]+ ($skip_fs) " /host/proc/1/mounts 2>/dev/null \
-    | awk '{print $1, $2}' \
+    | awk '{print $1, $2, $3}' \
     | sort -k1,1 -k2,2 \
     | awk '!seen[$1]++' \
-    | while IFS=' ' read -r device host_mount; do
+    | while IFS=' ' read -r device host_mount fstype; do
         # Skip non-absolute mount paths
         case "$host_mount" in /*) ;; *) continue ;; esac
+
+        # Apply include filter if set
+        if [ -n "${DISK_INCLUDE_MOUNTS:-}" ]; then
+          local matched=false
+          echo "$DISK_INCLUDE_MOUNTS" | tr ',' '\n' | while read -r prefix; do
+            [ "$host_mount" = "$prefix" ] && echo "match"
+          done | grep -q "match" || continue
+        fi
+
+        # Apply exclude filter if set
+        if [ -n "${DISK_EXCLUDE_MOUNTS:-}" ]; then
+          local skip=false
+          echo "$DISK_EXCLUDE_MOUNTS" | tr ',' '\n' | while read -r prefix; do
+            case "$host_mount" in "$prefix"*) echo "skip" ;; esac
+          done | grep -q "skip" && continue
+        fi
 
         # The actual path inside the container
         local container_path="/host${host_mount}"

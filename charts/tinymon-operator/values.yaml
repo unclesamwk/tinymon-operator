@@ -30,6 +30,10 @@ nodeMonitor:
     repository: unclesamwk/tinymon-node-monitor
     tag: ""
   interval: 60
+  # Comma-separated mount paths to include (empty = all)
+  diskIncludeMounts: ""
+  # Comma-separated mount prefixes to exclude (empty = none)
+  diskExcludeMounts: ""
   resources:
     requests:
       cpu: 10m
