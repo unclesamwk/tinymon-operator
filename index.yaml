@@ -2,23 +2,23 @@ apiVersion: v1
 entries:
   tinymon-operator:
   - apiVersion: v2
-    appVersion: 0.2.25
-    created: "2026-03-27T12:27:21.193229374Z"
+    appVersion: 0.2.26
+    created: "2026-03-27T12:54:49.361993185Z"
     description: Kubernetes operator that syncs annotated resources to TinyMon
-    digest: a12397551a51277abcbf4be7128a26384bdef7dd920b02530b91fcd629c25b9a
+    digest: ae0b8c4166db6858f908718ed299c1da12d4162554e4985e3403c2679dcc5602
     name: tinymon-operator
     type: application
     urls:
-    - https://unclesamwk.github.io/tinymon-operator/tinymon-operator-0.2.25.tgz
-    version: 0.2.25
+    - https://unclesamwk.github.io/tinymon-operator/tinymon-operator-0.2.26.tgz
+    version: 0.2.26
   - apiVersion: v2
-    appVersion: 0.2.25
-    created: "2026-03-27T12:27:21.193552346Z"
+    appVersion: 0.2.26
+    created: "2026-03-27T12:54:49.362277404Z"
     description: Kubernetes operator that syncs annotated resources to TinyMon
-    digest: a12397551a51277abcbf4be7128a26384bdef7dd920b02530b91fcd629c25b9a
+    digest: ae0b8c4166db6858f908718ed299c1da12d4162554e4985e3403c2679dcc5602
     name: tinymon-operator
     type: application
     urls:
-    - https://unclesamwk.github.io/tinymon-operator/.helm-packages/tinymon-operator-0.2.25.tgz
-    version: 0.2.25
-generated: "2026-03-27T12:27:21.192800044Z"
+    - https://unclesamwk.github.io/tinymon-operator/.helm-packages/tinymon-operator-0.2.26.tgz
+    version: 0.2.26
+generated: "2026-03-27T12:54:49.361589505Z"
