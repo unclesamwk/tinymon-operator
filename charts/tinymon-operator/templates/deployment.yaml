@@ -34,6 +34,12 @@ spec:
             - name: CLUSTER_NAME
               value: {{ .Values.tinymon.clusterName | quote }}
             {{- end }}
+            {{- if .Values.nodeMonitor.enabled }}
+            # DaemonSet owns node metric values (flap-suppressed); operator
+            # only maintains node host + check definitions, never pushes values.
+            - name: NODE_MONITOR_DAEMONSET
+              value: "true"
+            {{- end }}
           ports:
             - name: metrics
               containerPort: 8080

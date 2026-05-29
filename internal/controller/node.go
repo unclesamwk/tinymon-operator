@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/unclesamwk/tinymon-operator/internal/tinymon"
@@ -22,12 +23,21 @@ type NodeReconciler struct {
 	TinyMon   *tinymon.Client
 	Cluster   string
 	Clientset kubernetes.Interface
+	// PushMetrics controls whether the operator pushes node metric VALUES
+	// (memory/load/disk) itself. When the node-monitor DaemonSet is deployed
+	// it owns these values (with flap suppression + MemAvailable-based memory),
+	// so the operator must not also push raw values onto the same checks —
+	// otherwise the two sources race every interval and flap the status.
+	PushMetrics bool
 }
 
 func SetupNodeReconciler(mgr ctrl.Manager, tm *tinymon.Client, cluster string, cs kubernetes.Interface) error {
+	// The node-monitor DaemonSet, when enabled, sets NODE_MONITOR_DAEMONSET=true
+	// on the operator and becomes the sole source of node metric values.
+	pushMetrics := os.Getenv("NODE_MONITOR_DAEMONSET") != "true"
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Node{}).
-		Complete(&NodeReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster, Clientset: cs})
+		Complete(&NodeReconciler{Client: mgr.GetClient(), TinyMon: tm, Cluster: cluster, Clientset: cs, PushMetrics: pushMetrics})
 }
 
 func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -79,6 +89,14 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		if err := r.TinyMon.UpsertCheck(check); err != nil {
 			log.Error(err, "failed to upsert check", "type", checkType)
 		}
+	}
+
+	// When the node-monitor DaemonSet is deployed it owns the metric values
+	// (flap-suppressed, MemAvailable-based). The operator only maintains the
+	// host + check definitions here and does NOT push values, to avoid two
+	// sources racing on the same checks and flapping the status.
+	if !r.PushMetrics {
+		return ctrl.Result{RequeueAfter: time.Duration(interval) * time.Second}, nil
 	}
 
 	// Get node metrics via direct REST call (not via cache, to avoid watch errors)
