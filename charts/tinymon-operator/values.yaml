@@ -34,6 +34,19 @@ nodeMonitor:
   diskIncludeMounts: ""
   # Comma-separated mount prefixes to exclude (empty = none)
   diskExcludeMounts: ""
+  # Flap suppression: require this many consecutive samples at a new status
+  # before reporting the change (1 = report every sample, no debounce).
+  # Raise to 3 to ride out transient spikes (e.g. a backup job briefly
+  # pushing memory over the line) without flapping the check.
+  flapSamples: 1
+  # Alert thresholds in percent (warning at *WarnPct, critical at *CritPct).
+  thresholds:
+    memWarnPct: 80
+    memCritPct: 90
+    diskWarnPct: 80
+    diskCritPct: 90
+    loadWarnPct: 80
+    loadCritPct: 90
   resources:
     requests:
       cpu: 10m

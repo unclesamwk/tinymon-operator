@@ -46,6 +46,22 @@ spec:
                   fieldPath: spec.nodeName
             - name: INTERVAL
               value: {{ .Values.nodeMonitor.interval | quote }}
+            - name: FLAP_SAMPLES
+              value: {{ .Values.nodeMonitor.flapSamples | quote }}
+            {{- with .Values.nodeMonitor.thresholds }}
+            - name: MEM_WARN_PCT
+              value: {{ .memWarnPct | quote }}
+            - name: MEM_CRIT_PCT
+              value: {{ .memCritPct | quote }}
+            - name: DISK_WARN_PCT
+              value: {{ .diskWarnPct | quote }}
+            - name: DISK_CRIT_PCT
+              value: {{ .diskCritPct | quote }}
+            - name: LOAD_WARN_PCT
+              value: {{ .loadWarnPct | quote }}
+            - name: LOAD_CRIT_PCT
+              value: {{ .loadCritPct | quote }}
+            {{- end }}
             {{- if .Values.nodeMonitor.diskIncludeMounts }}
             - name: DISK_INCLUDE_MOUNTS
               value: {{ .Values.nodeMonitor.diskIncludeMounts | quote }}

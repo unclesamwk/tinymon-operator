@@ -7,9 +7,74 @@ set -eu
 : "${NODE_NAME:?NODE_NAME is required}"
 : "${INTERVAL:=60}"
 
+# Alert thresholds (percent). warning at *_WARN_PCT, critical at *_CRIT_PCT.
+: "${MEM_WARN_PCT:=80}"
+: "${MEM_CRIT_PCT:=90}"
+: "${DISK_WARN_PCT:=80}"
+: "${DISK_CRIT_PCT:=90}"
+: "${LOAD_WARN_PCT:=80}"
+: "${LOAD_CRIT_PCT:=90}"
+
+# Flap suppression: require this many consecutive samples at a new status
+# before reporting the change. 1 = report every sample immediately (no
+# debounce). Higher values smooth out transient spikes (e.g. a backup job
+# briefly pushing memory over the line) that would otherwise flap the check.
+: "${FLAP_SAMPLES:=1}"
+
 HOST_ADDRESS="k8s://${CLUSTER_NAME}/node/${NODE_NAME}"
 
+# Per-check debounce state survives across loop iterations (pod-lifetime).
+STATE_DIR="${STATE_DIR:-/tmp/tinymon-node-monitor-state}"
+mkdir -p "$STATE_DIR"
+
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $*" >&2; }
+
+# smooth_status <key> <raw_status>
+# Debounces status transitions: a new status is only reported after it has
+# held for FLAP_SAMPLES consecutive samples. Until then the last reported
+# status is held. State is keyed by <key> so each check (memory, load,
+# per-mount disk, per-device disk_health) debounces independently.
+smooth_status() {
+  key="$1"
+  raw="$2"
+
+  # No debounce requested -> pass through unchanged.
+  if [ "$FLAP_SAMPLES" -le 1 ]; then
+    echo "$raw"
+    return
+  fi
+
+  f="${STATE_DIR}/$(echo "$key" | tr '/:.' '___')"
+  if [ -f "$f" ]; then
+    IFS='|' read -r last pending count < "$f"
+  else
+    last="$raw"; pending="$raw"; count=0
+  fi
+  : "${last:=$raw}"; : "${pending:=$raw}"; : "${count:=0}"
+
+  if [ "$raw" = "$last" ]; then
+    # Stable at the reported status -> reset any pending change.
+    printf '%s|%s|%s\n' "$last" "$last" 0 > "$f"
+    echo "$last"
+    return
+  fi
+
+  if [ "$raw" = "$pending" ]; then
+    count=$((count + 1))
+  else
+    pending="$raw"; count=1
+  fi
+
+  if [ "$count" -ge "$FLAP_SAMPLES" ]; then
+    # Change has held long enough -> commit it.
+    printf '%s|%s|%s\n' "$raw" "$raw" 0 > "$f"
+    echo "$raw"
+  else
+    # Hold the last reported status while the change is still pending.
+    printf '%s|%s|%s\n' "$last" "$pending" "$count" > "$f"
+    echo "$last"
+  fi
+}
 
 # Format bytes to human-readable (Gi / Mi)
 fmt_bytes() {
@@ -77,9 +142,10 @@ collect_disk() {
         local used_h=$(fmt_bytes $used_bytes)
 
         local status="ok"
-        if [ "$pct_raw" -ge 90 ]; then status="critical"
-        elif [ "$pct_raw" -ge 80 ]; then status="warning"
+        if [ "$pct_raw" -ge "$DISK_CRIT_PCT" ]; then status="critical"
+        elif [ "$pct_raw" -ge "$DISK_WARN_PCT" ]; then status="warning"
         fi
+        status=$(smooth_status "disk:${host_mount}" "$status")
 
         local display_mount="$host_mount"
         local config=$(jq -cn --arg m "$display_mount" '{mount: $m}')
@@ -122,9 +188,10 @@ collect_memory() {
   local used_h=$(fmt_bytes $used_bytes)
 
   local status="ok"
-  if [ "$pct_int" -ge 90 ]; then status="critical"
-  elif [ "$pct_int" -ge 80 ]; then status="warning"
+  if [ "$pct_int" -ge "$MEM_CRIT_PCT" ]; then status="critical"
+  elif [ "$pct_int" -ge "$MEM_WARN_PCT" ]; then status="warning"
   fi
+  status=$(smooth_status "memory" "$status")
 
   jq -cn \
     --arg ha "$HOST_ADDRESS" \
@@ -152,9 +219,10 @@ collect_load() {
   local pct=$(awk "BEGIN { printf \"%.0f\", $load1 / $ncpu * 100 }")
 
   local status="ok"
-  if [ "$pct" -ge 90 ]; then status="critical"
-  elif [ "$pct" -ge 80 ]; then status="warning"
+  if [ "$pct" -ge "$LOAD_CRIT_PCT" ]; then status="critical"
+  elif [ "$pct" -ge "$LOAD_WARN_PCT" ]; then status="warning"
   fi
+  status=$(smooth_status "load" "$status")
 
   jq -cn \
     --arg ha "$HOST_ADDRESS" \
@@ -203,6 +271,8 @@ collect_disk_health() {
       value="$temp"
       msg="${msg}, ${temp}°C"
     fi
+
+    status=$(smooth_status "disk_health:${devname}" "$status")
 
     echo $(jq -cn \
       --arg ha "$HOST_ADDRESS" \
