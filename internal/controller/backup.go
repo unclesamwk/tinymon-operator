@@ -122,28 +122,43 @@ func lastBackupStatus(backups []k8upv1.Backup) (string, string, float64) {
 	ageSec := age.Seconds()
 	ageStr := formatDuration(age)
 
-	// Check conditions for completion/failure
-	for _, cond := range latest.Status.Conditions {
-		if cond.Type == "Completed" && cond.Status == "True" {
-			if age > 48*time.Hour {
-				return "warning", fmt.Sprintf("Last backup completed %s ago (stale)", ageStr), ageSec
-			}
-			return "ok", fmt.Sprintf("Last backup completed %s ago", ageStr), ageSec
+	// k8up has no "Failed" condition type. A failed run is `Completed: True` with a
+	// reason other than Succeeded — so reading the condition *type* alone reports every
+	// failure as a success. That is exactly what happened to papra: four consecutive
+	// failed backups (the restic repository did not even exist) while this check stayed
+	// green from 2026-07-22 to 2026-07-31. HasFailed/HasSucceeded are k8up's own
+	// helpers and know the reasons, including the pre-backup-pod failure cases.
+	switch {
+	case latest.Status.HasFailed():
+		return "critical", fmt.Sprintf("Last backup failed %s ago: %s", ageStr, completedMessage(latest.Status)), ageSec
+
+	case latest.Status.HasSucceeded():
+		if age > 48*time.Hour {
+			return "warning", fmt.Sprintf("Last backup completed %s ago (stale)", ageStr), ageSec
 		}
-		if cond.Type == "Failed" && cond.Status == "True" {
-			return "critical", fmt.Sprintf("Last backup failed %s ago: %s", ageStr, cond.Message), ageSec
-		}
-	}
+		return "ok", fmt.Sprintf("Last backup completed %s ago", ageStr), ageSec
 
 	// No terminal condition yet — might be running
-	if age < 2*time.Hour {
+	case age < 2*time.Hour:
 		return "ok", fmt.Sprintf("Backup in progress (%s ago)", ageStr), ageSec
-	}
-	if age > 48*time.Hour {
-		return "warning", fmt.Sprintf("No recent backup (last: %s ago)", ageStr), ageSec
-	}
 
-	return "ok", fmt.Sprintf("Last backup: %s ago", ageStr), ageSec
+	case age > 48*time.Hour:
+		return "warning", fmt.Sprintf("No recent backup (last: %s ago)", ageStr), ageSec
+
+	default:
+		return "ok", fmt.Sprintf("Last backup: %s ago", ageStr), ageSec
+	}
+}
+
+// completedMessage returns k8up's own message for the Completed condition, which names
+// the failing job. Falls back to a generic string when the condition is absent.
+func completedMessage(status k8upv1.Status) string {
+	for _, cond := range status.Conditions {
+		if cond.Type == k8upv1.ConditionCompleted.String() && cond.Message != "" {
+			return cond.Message
+		}
+	}
+	return "no details in the Completed condition"
 }
 
 func formatDuration(d time.Duration) string {
