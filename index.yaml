@@ -1,0 +1,24 @@
+apiVersion: v1
+entries:
+  tinymon-operator:
+  - apiVersion: v2
+    appVersion: 0.2.30
+    created: "2026-07-31T10:17:33.520560941Z"
+    description: Kubernetes operator that syncs annotated resources to TinyMon
+    digest: c474e6c3646f9a644541559c9d3d3ccd17d8ed6ec9a0c695ed83ef588d18c951
+    name: tinymon-operator
+    type: application
+    urls:
+    - https://unclesamwk.github.io/tinymon-operator/tinymon-operator-0.2.30.tgz
+    version: 0.2.30
+  - apiVersion: v2
+    appVersion: 0.2.30
+    created: "2026-07-31T10:17:33.520882316Z"
+    description: Kubernetes operator that syncs annotated resources to TinyMon
+    digest: c474e6c3646f9a644541559c9d3d3ccd17d8ed6ec9a0c695ed83ef588d18c951
+    name: tinymon-operator
+    type: application
+    urls:
+    - https://unclesamwk.github.io/tinymon-operator/.helm-packages/tinymon-operator-0.2.30.tgz
+    version: 0.2.30
+generated: "2026-07-31T10:17:33.520044901Z"
