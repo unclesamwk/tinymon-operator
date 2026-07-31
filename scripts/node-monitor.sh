@@ -216,7 +216,14 @@ collect_load() {
 
   # Get number of CPUs
   local ncpu=$(grep -c '^processor' /host/proc/cpuinfo 2>/dev/null || echo 1)
-  local pct=$(awk "BEGIN { printf \"%.0f\", $load1 / $ncpu * 100 }")
+
+  # Status comes from the 5-minute average, not the 1-minute one. load1 tracks
+  # every burst: a k8up backup or a deploy pushes a 4-core host from 68% to 115%
+  # for a minute, which is work getting done, not a problem. Measured on
+  # k3s-node01 2026-07-31: 40/58/49/58/89/115/82/56/58/68 percent on load1 while
+  # nothing was wrong. A 5-minute average that sits above two per core is a real
+  # queue. The message still reports all three so the spike stays visible.
+  local pct=$(awk "BEGIN { printf \"%.0f\", $load5 / $ncpu * 100 }")
 
   local status="ok"
   if [ "$pct" -ge "$LOAD_CRIT_PCT" ]; then status="critical"

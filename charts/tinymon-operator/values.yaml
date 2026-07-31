@@ -40,6 +40,14 @@ nodeMonitor:
   # pushing memory over the line) without flapping the check.
   flapSamples: 1
   # Alert thresholds in percent (warning at *WarnPct, critical at *CritPct).
+  #
+  # load*Pct is load per core, taken from the **5-minute** average: 100 means
+  # every core busy with nothing queued, 200 means twice as many runnable
+  # processes as cores. The 1-minute average is still reported in the message but
+  # no longer decides the status — it tracks every backup and deploy, which is
+  # work happening, not a fault. A host that idles above the default (a Pi at 80%
+  # RAM, a 4-core box with a base load of 2.7) needs these raised per cluster,
+  # otherwise the check alerts on the normal state.
   thresholds:
     memWarnPct: 80
     memCritPct: 90
